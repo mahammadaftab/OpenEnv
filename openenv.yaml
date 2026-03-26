@@ -1,0 +1,174 @@
+# OpenEnv Configuration
+# Real-world drone navigation environment for AI agent training
+
+environment:
+  name: "openenv-drone-navigation"
+  version: "1.0.0"
+  description: "Autonomous drone navigation for warehouse inventory inspection"
+  
+# Task difficulty levels with agent graders
+tasks:
+  easy:
+    name: "Basic Navigation"
+    description: "Navigate to target with minimal obstacles"
+    config:
+      episode_length: 300
+      boundary_limit: 80.0
+      max_velocity: 60.0
+      gravity: 5.0
+      friction: 0.02
+      obstacle_count: 0
+      wind_disturbance: false
+      sensor_noise: 0.0
+      target_radius: 5.0
+    grader:
+      success_threshold: 0.7
+      partial_credit: true
+      criteria:
+        - name: "reached_target"
+          weight: 0.6
+        - name: "time_efficiency"
+          weight: 0.2
+        - name: "energy_efficiency"
+          weight: 0.2
+    
+  medium:
+    name: "Obstacle Avoidance"
+    description: "Navigate while avoiding static obstacles"
+    config:
+      episode_length: 500
+      boundary_limit: 60.0
+      max_velocity: 50.0
+      gravity: 7.0
+      friction: 0.03
+      obstacle_count: 5
+      wind_disturbance: false
+      sensor_noise: 0.05
+      target_radius: 4.0
+    grader:
+      success_threshold: 0.75
+      partial_credit: true
+      criteria:
+        - name: "reached_target"
+          weight: 0.5
+        - name: "collision_avoidance"
+          weight: 0.25
+        - name: "time_efficiency"
+          weight: 0.15
+        - name: "energy_efficiency"
+          weight: 0.1
+    
+  hard:
+    name: "Dynamic Environment"
+    description: "Navigate with moving obstacles and wind disturbances"
+    config:
+      episode_length: 700
+      boundary_limit: 50.0
+      max_velocity: 40.0
+      gravity: 9.0
+      friction: 0.05
+      obstacle_count: 10
+      wind_disturbance: true
+      sensor_noise: 0.1
+      target_radius: 3.0
+    grader:
+      success_threshold: 0.8
+      partial_credit: true
+      criteria:
+        - name: "reached_target"
+          weight: 0.45
+        - name: "collision_avoidance"
+          weight: 0.25
+        - name: "wind_compensation"
+          weight: 0.15
+        - name: "time_efficiency"
+          weight: 0.1
+        - name: "energy_efficiency"
+          weight: 0.05
+
+# Reward function configuration
+reward:
+  # Dense rewards
+  distance_reward_scale: -0.15
+  progress_bonus_scale: 0.8
+  velocity_penalty_scale: -0.02
+  
+  # Sparse rewards
+  success_bonus: 100.0
+  collision_penalty: -50.0
+  boundary_violation_penalty: -30.0
+  
+  # Partial progress signals
+  waypoint_bonus: 10.0
+  altitude_bonus: 5.0
+  stability_bonus: 2.0
+  
+  # Shaping
+  reward_clip: null
+  reward_scale: 1.0
+  sparse_rewards: false
+
+# Observation space
+observation:
+  dimensions: 12
+  components:
+    - name: "position"
+      size: 3
+      description: "3D position (x, y, z)"
+    - name: "velocity"
+      size: 3
+      description: "3D velocity (vx, vy, vz)"
+    - name: "target"
+      size: 3
+      description: "Target position (tx, ty, tz)"
+    - name: "obstacles"
+      size: 2
+      description: "Nearest obstacle distance and angle"
+    - name: "time_remaining"
+      size: 1
+      description: "Normalized time left"
+
+# Action space
+action:
+  dimensions: 4
+  type: "continuous"
+  bounds: [-1.0, 1.0]
+  components:
+    - name: "thrust"
+      description: "Vertical thrust control"
+    - name: "yaw"
+      description: "Rotation control"
+    - name: "pitch"
+      description: "Forward/backward tilt"
+    - name: "roll"
+      description: "Lateral movement"
+
+# Physics parameters
+physics:
+  dt: 0.02
+  mass: 1.5
+  drag_coefficient: 0.01
+  max_thrust: 20.0
+  battery_capacity: 1000.0
+  battery_drain_rate: 0.5
+
+# Rendering
+rendering:
+  mode: ["human", "rgb_array"]
+  fps: 60
+  screen_size: [1024, 768]
+  camera_follow: true
+  show_trajectory: true
+
+# Logging and monitoring
+logging:
+  verbose: true
+  log_metrics: true
+  log_frequency: 50
+  tensorboard: true
+
+# Evaluation
+evaluation:
+  n_eval_episodes: 10
+  deterministic: true
+  seed: 42
