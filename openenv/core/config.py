@@ -57,7 +57,7 @@ class EnvConfig:
     
     # Core environment settings
     episode_length: int = 500
-    observation_dim: int = 12  # 3D navigation (pos:3, vel:3, target:3, time:1, dist:1, obstacle:1)
+    observation_dim: int = 8  # 2D navigation (pos:2, vel:2, target:2, time:1, dist:1)
     action_dim: int = 4  # Drone control (thrust, yaw, pitch, roll)
     random_seed: Optional[int] = None
     

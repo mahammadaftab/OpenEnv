@@ -329,7 +329,7 @@ def compare_all_levels(seed: int = 42):
 def create_demo():
     """Create Gradio interface."""
     
-    with gr.Blocks(title="OpenEnv Drone Navigation", theme=gr.themes.Soft()) as demo:
+    with gr.Blocks(title="OpenEnv Drone Navigation") as demo:
         gr.Markdown("""
         # 🚁 OpenEnv: Autonomous Drone Navigation
         
@@ -431,4 +431,4 @@ def create_demo():
 if __name__ == "__main__":
     # Create and launch demo
     demo = create_demo()
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860, theme=gr.themes.Soft())

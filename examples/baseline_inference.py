@@ -1,10 +1,11 @@
 """
 Baseline Inference Script for OpenEnv
 
-Runs reproducible evaluation with deterministic scoring across all difficulty levels.
+Uses OpenAI API to run a language model against the environment for reproducible baseline evaluation.
 
 Usage:
-    python examples/baseline_inference.py --task_level medium --n_episodes 10
+    export OPENAI_API_KEY=your_key
+    python examples/baseline_inference.py --task_level medium --n_episodes 5
     python examples/baseline_inference.py --all_tasks
 """
 
@@ -15,12 +16,76 @@ import sys
 from typing import Dict, Any, List
 from pathlib import Path
 import numpy as np
+import openai
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from openenv import OpenEnv, EnvConfig
 from openenv.core.grader import create_grader
+
+
+def get_openai_action(observation, task_description: str) -> np.ndarray:
+    """
+    Get action from OpenAI API based on current observation.
+    
+    Args:
+        observation: Current observation (Observation object)
+        task_description: Description of the task
+        
+    Returns:
+        Action array [thrust, yaw, pitch, roll]
+    """
+    # Check API key
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable not set")
+    
+    client = openai.OpenAI(api_key=api_key)
+    
+    # Format observation for prompt
+    obs_text = f"""
+Current State:
+- Position: {observation.position}
+- Velocity: {observation.velocity}
+- Target: {observation.target}
+- Nearest Obstacle: distance={observation.obstacles[0]:.2f}, angle={observation.obstacles[1]:.2f}
+- Time Remaining: {observation.time_remaining:.2f}
+
+Task: {task_description}
+You are controlling a drone. Output 4 values between -1 and 1 for [thrust, yaw, pitch, roll].
+Thrust: vertical movement (-1=down, 1=up)
+Yaw: rotation (-1=left, 1=right)
+Pitch: forward/back (-1=back, 1=forward)
+Roll: lateral movement (-1=left, 1=right)
+"""
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert drone pilot. Output only 4 comma-separated numbers between -1 and 1."},
+                {"role": "user", "content": obs_text}
+            ],
+            max_tokens=50,
+            temperature=0.1
+        )
+        
+        # Parse response
+        content = response.choices[0].message.content.strip()
+        values = [float(x.strip()) for x in content.split(',') if x.strip()]
+        
+        if len(values) != 4:
+            print(f"Warning: Expected 4 values, got {len(values)}. Using random action.")
+            return np.random.uniform(-1, 1, 4)
+        
+        # Clip to valid range
+        action = np.clip(values, -1, 1)
+        return action
+        
+    except Exception as e:
+        print(f"OpenAI API error: {e}. Using random action.")
+        return np.random.uniform(-1, 1, 4)
 
 
 def load_config_from_yaml(yaml_path: str) -> Dict[str, Any]:
@@ -112,6 +177,7 @@ def run_episode(
     env: OpenEnv,
     grader,
     seed: int,
+    task_description: str,
     render: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -139,8 +205,8 @@ def run_episode(
     grader.episode_data['optimal_distance'] = optimal_distance
     
     while not done:
-        # Get action (random policy for baseline)
-        action = env.action_space.sample()
+        # Get action from OpenAI
+        action = get_openai_action(obs, task_description)
         
         # Take step
         obs, reward, terminated, truncated, info = env.step(action)
@@ -255,7 +321,7 @@ def evaluate_task(
     episode_results = []
     for ep in range(n_episodes):
         episode_seed = seed + ep
-        result = run_episode(env, grader, episode_seed, render=render)
+        result = run_episode(env, grader, episode_seed, config['description'], render=render)
         episode_results.append(result)
         
         if verbose:

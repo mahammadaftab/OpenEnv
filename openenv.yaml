@@ -5,6 +5,11 @@ environment:
   name: "openenv-drone-navigation"
   version: "1.0.0"
   description: "Autonomous drone navigation for warehouse inventory inspection"
+  authors: ["OpenEnv Team"]
+  license: "MIT"
+  repository: "https://github.com/yourusername/OpenEnv"
+  tags: ["reinforcement-learning", "drone", "navigation", "warehouse", "inventory"]
+  openenv_version: "1.0"
   
 # Task difficulty levels with agent graders
 tasks:
@@ -110,23 +115,23 @@ reward:
 
 # Observation space
 observation:
-  dimensions: 12
+  dimensions: 8
   components:
     - name: "position"
-      size: 3
-      description: "3D position (x, y, z)"
-    - name: "velocity"
-      size: 3
-      description: "3D velocity (vx, vy, vz)"
-    - name: "target"
-      size: 3
-      description: "Target position (tx, ty, tz)"
-    - name: "obstacles"
       size: 2
-      description: "Nearest obstacle distance and angle"
+      description: "2D position (x, y)"
+    - name: "velocity"
+      size: 2
+      description: "2D velocity (vx, vy)"
+    - name: "target"
+      size: 2
+      description: "Target position (tx, ty)"
     - name: "time_remaining"
       size: 1
       description: "Normalized time left"
+    - name: "distance_to_target"
+      size: 1
+      description: "Euclidean distance to target"
 
 # Action space
 action:

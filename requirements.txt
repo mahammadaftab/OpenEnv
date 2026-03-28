@@ -12,6 +12,10 @@ matplotlib>=3.5.0
 
 # Configuration
 pyyaml>=6.0
+pydantic>=2.0.0
+
+# OpenAI API for baseline inference
+openai>=1.0.0
 
 # Hugging Face Spaces / Web Interface
 gradio>=4.0.0
