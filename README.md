@@ -1,3 +1,16 @@
+---
+title: OpenEnv
+emoji: 🚀
+colorFrom: green
+colorTo: blue
+sdk: gradio
+sdk_version: 6.10.0
+python_version: '3.11'
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # OpenEnv
 
 <div align="center">
