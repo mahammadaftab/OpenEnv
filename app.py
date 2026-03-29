@@ -124,106 +124,104 @@ def run_demo_episode(
     Returns:
         Tuple of (screenshot, metrics_text, grade_text)
     """
-    # Get configuration
-    task_config = get_task_config(task_level)
-    
-    # Create environment
-    env_config = EnvConfig(
-        **task_config['config'],
-        task_level=task_level,
-        render_mode=render_mode,
-        verbose=False,
-    )
-    
     try:
-        env = OpenEnv(config=env_config)
-    except Exception as e:
-        import traceback
-        error_msg = f"Failed to create environment: {str(e)}\n\n{traceback.format_exc()}"
-        print(error_msg)
-        # Return placeholder image and error message
-        placeholder = np.zeros((768, 1024, 3), dtype=np.uint8)
-        return placeholder, "Error initializing environment", error_msg
-    
-    # Create grader
-    grader = create_grader(task_level, task_config['grader'])
-    
-    # Reset
-    obs, info = env.reset(seed=seed)
-    grader.reset()
-    
-    # Run episode
-    frames = []
-    total_reward = 0.0
-    steps = 0
-    max_steps = 200  # Limit for demo
-    
-    prev_position = env.position.copy()
-    optimal_distance = np.linalg.norm(env.target_position - env.position)
-    grader.episode_data['optimal_distance'] = optimal_distance
-    
-    for step in range(max_steps):
-        # Random action for demo (in real use, this would be your agent)
-        action = env.action_space.sample()
+        # Check if we're in a headless environment (like HF Spaces)
+        import os
+        is_headless = os.environ.get('HF_SPACES') == '1' or not os.environ.get('DISPLAY', '')
         
-        # Take step
-        obs, reward, terminated, truncated, info = env.step(action)
+        if is_headless:
+            render_mode = None  # Disable rendering in headless environments
         
-        # Update grader
-        current_position = env.position.copy()
-        distance_delta = np.linalg.norm(current_position - prev_position)
+        # Get configuration
+        task_config = get_task_config(task_level)
         
-        grader.update(
-            steps=1,
-            distance_traveled=distance_delta,
-            energy_consumed=np.sum(np.abs(action)) * 0.5,
+        # Create environment
+        env_config = EnvConfig(
+            **task_config['config'],
+            task_level=task_level,
+            render_mode=render_mode,
+            verbose=False,
         )
         
-        # Check collisions
-        if hasattr(env, 'check_collision') and env.check_collision():
-            grader.update(collisions=1)
+        env = OpenEnv(config=env_config)
+        grader = create_grader(task_level, task_config['grader'])
         
-        # Track wind deviation
-        if env.config.wind_disturbance and hasattr(env, 'wind_deviation'):
-            grader.update(max_wind_deviation=max(
-                grader.episode_data['max_wind_deviation'],
-                env.wind_deviation
-            ))
+        # Reset
+        obs, info = env.reset(seed=seed)
+        grader.reset()
         
-        prev_position = current_position.copy()
-        total_reward += reward
-        steps += 1
+        # Run episode
+        frames = []
+        total_reward = 0.0
+        steps = 0
+        max_steps = 200  # Limit for demo
         
-        # Render frame
-        if render_mode == "rgb_array":
-            try:
-                frame = env.render()
-                if frame is not None:
-                    frames.append(frame)
-            except Exception as e:
-                print(f"Rendering error (non-fatal): {e}")
-                # Continue without rendering
-                pass
+        prev_position = env.position.copy()
+        optimal_distance = np.linalg.norm(env.target_position - env.position)
+        grader.episode_data['optimal_distance'] = optimal_distance
         
-        # Check termination
-        if terminated or truncated:
-            break
-    
-    # Final updates
-    final_distance = np.linalg.norm(env.position - env.target_position)
-    target_radius = getattr(env, 'target_radius', 5.0)
-    
-    grader.update(
-        target_reached=final_distance < target_radius,
-        final_distance_to_target=final_distance,
-        time_to_complete=steps,
-    )
-    
-    # Get grade report
-    grade_report = grader.get_grade_report()
-    
-    # Generate metrics text
-    metrics_text = f"""
+        for step in range(max_steps):
+            # Random action for demo (in real use, this would be your agent)
+            action = env.action_space.sample()
+            
+            # Take step
+            obs, reward, terminated, truncated, info = env.step(action)
+            
+            # Update grader
+            current_position = env.position.copy()
+            distance_delta = np.linalg.norm(current_position - prev_position)
+            
+            grader.update(
+                steps=1,
+                distance_traveled=distance_delta,
+                energy_consumed=np.sum(np.abs(action)) * 0.5,
+            )
+            
+            # Check collisions
+            if hasattr(env, 'check_collision') and env.check_collision():
+                grader.update(collisions=1)
+            
+            # Track wind deviation
+            if env.config.wind_disturbance and hasattr(env, 'wind_deviation'):
+                grader.update(max_wind_deviation=max(
+                    grader.episode_data['max_wind_deviation'],
+                    env.wind_deviation
+                ))
+            
+            prev_position = current_position.copy()
+            total_reward += reward
+            steps += 1
+            
+            # Render frame (only if not headless)
+            if render_mode == "rgb_array" and not is_headless:
+                try:
+                    frame = env.render()
+                    if frame is not None:
+                        frames.append(frame)
+                except Exception as e:
+                    print(f"Rendering error (non-fatal): {e}")
+                    # Continue without rendering
+                    pass
+            
+            # Check termination
+            if terminated or truncated:
+                break
+        
+        # Final updates
+        final_distance = np.linalg.norm(env.position - env.target_position)
+        target_radius = getattr(env, 'target_radius', 5.0)
+        
+        grader.update(
+            target_reached=final_distance < target_radius,
+            final_distance_to_target=final_distance,
+            time_to_complete=steps,
+        )
+        
+        # Get grade report
+        grade_report = grader.get_grade_report()
+        
+        # Generate metrics text
+        metrics_text = f"""
 **Episode Statistics:**
 - Steps: {steps}
 - Total Reward: {total_reward:.2f}
@@ -231,33 +229,43 @@ def run_demo_episode(
 - Target Reached: {'Yes ✓' if grade_report['episode_data']['target_reached'] else 'No ✗'}
 - Collisions: {grade_report['episode_data']['collisions']}
     """.strip()
-    
-    # Generate grade text
-    grade_text = f"""
+        
+        # Generate grade text
+        grade_text = f"""
 **Performance Grade: {grade_report['final_score']:.2f} / 1.00**
 
 {grade_report['feedback']}
 
 **Criteria Scores:**
     """
-    
-    for criterion_name, score in grade_report['criteria_scores'].items():
-        grade_text += f"\n- {criterion_name.replace('_', ' ').title()}: {score:.2f}"
-    
-    grade_text += f"\n\n**Status:** {'✓ PASSED' if grade_report['passed'] else '✗ FAILED'}"
-    grade_text += f"\nThreshold: {grade_report['success_threshold']:.2f}"
-    
-    env.close()
-    
-    # Return last frame (or create composite if multiple frames)
-    if len(frames) > 0:
-        # Use middle frame as representative
-        screenshot = frames[len(frames) // 2]
-    else:
-        # Create placeholder
-        screenshot = np.zeros((768, 1024, 3), dtype=np.uint8)
-    
-    return screenshot, metrics_text, grade_text
+        
+        for criterion_name, score in grade_report['criteria_scores'].items():
+            grade_text += f"\n- {criterion_name.replace('_', ' ').title()}: {score:.2f}"
+        
+        grade_text += f"\n\n**Status:** {'✓ PASSED' if grade_report['passed'] else '✗ FAILED'}"
+        grade_text += f"\nThreshold: {grade_report['success_threshold']:.2f}"
+        
+        env.close()
+        
+        # Return appropriate image based on environment
+        if is_headless or len(frames) == 0:
+            # Create a simple placeholder image for headless environments
+            placeholder = np.zeros((768, 1024, 3), dtype=np.uint8)
+            # Add some text to indicate it's a demo
+            placeholder[:100, :300] = [200, 200, 200]  # Light gray rectangle
+            return placeholder, metrics_text, grade_text
+        else:
+            # Use middle frame as representative
+            screenshot = frames[len(frames) // 2]
+            return screenshot, metrics_text, grade_text
+            
+    except Exception as e:
+        import traceback
+        error_msg = f"Failed to run episode: {str(e)}\n\n{traceback.format_exc()}"
+        print(error_msg)
+        # Return placeholder image and error message
+        placeholder = np.zeros((768, 1024, 3), dtype=np.uint8)
+        return placeholder, "Error running episode", error_msg
 
 
 def compare_all_levels(seed: int = 42):
@@ -270,60 +278,72 @@ def compare_all_levels(seed: int = 42):
     Returns:
         Comparison table text
     """
-    results = []
-    
-    for level in ['easy', 'medium', 'hard']:
-        task_config = get_task_config(level)
+    try:
+        results = []
         
-        env_config = EnvConfig(
-            **task_config['config'],
-            task_level=level,
-            verbose=False,
-        )
-        
-        env = OpenEnv(config=env_config)
-        grader_instance = create_grader(level, task_config['grader'])
-        
-        obs, _ = env.reset(seed=seed)
-        grader_instance.reset()
-        
-        # Run episode
-        done = False
-        steps = 0
-        while not done and steps < 300:
-            action = env.action_space.sample()
-            obs, reward, terminated, truncated, info = env.step(action)
+        for level in ['easy', 'medium', 'hard']:
+            task_config = get_task_config(level)
             
-            grader_instance.update(steps=1)
-            done = terminated or truncated
-            steps += 1
+            # Check if we're in a headless environment
+            import os
+            is_headless = os.environ.get('HF_SPACES') == '1' or not os.environ.get('DISPLAY', '')
+            render_mode = None if is_headless else None
+            
+            env_config = EnvConfig(
+                **task_config['config'],
+                task_level=level,
+                render_mode=render_mode,
+                verbose=False,
+            )
+            
+            env = OpenEnv(config=env_config)
+            grader_instance = create_grader(level, task_config['grader'])
+            
+            obs, _ = env.reset(seed=seed)
+            grader_instance.reset()
+            
+            # Run episode
+            done = False
+            steps = 0
+            while not done and steps < 300:
+                action = env.action_space.sample()
+                obs, reward, terminated, truncated, info = env.step(action)
+                
+                grader_instance.update(steps=1)
+                done = terminated or truncated
+                steps += 1
+            
+            # Final evaluation
+            final_distance = np.linalg.norm(env.position - env.target_position)
+            grader_instance.update(
+                target_reached=final_distance < 5.0,
+                final_distance_to_target=final_distance,
+            )
+            
+            grade_report = grader_instance.get_grade_report()
+            
+            results.append({
+                'level': level.upper(),
+                'score': grade_report['final_score'],
+                'passed': '✓' if grade_report['passed'] else '✗',
+                'steps': steps,
+            })
+            
+            env.close()
         
-        # Final evaluation
-        final_distance = np.linalg.norm(env.position - env.target_position)
-        grader_instance.update(
-            target_reached=final_distance < 5.0,
-            final_distance_to_target=final_distance,
-        )
+        # Create comparison table
+        table = "| Difficulty | Score | Status | Steps |\n"
+        table += "|------------|-------|--------|-------|\n"
         
-        grade_report = grader_instance.get_grade_report()
+        for result in results:
+            table += f"| {result['level']:10s} | {result['score']:.2f} | {result['passed']:6s} | {result['steps']:5d} |\n"
         
-        results.append({
-            'level': level.upper(),
-            'score': grade_report['final_score'],
-            'passed': '✓' if grade_report['passed'] else '✗',
-            'steps': steps,
-        })
-        
-        env.close()
-    
-    # Create comparison table
-    table = "| Difficulty | Score | Status | Steps |\n"
-    table += "|------------|-------|--------|-------|\n"
-    
-    for result in results:
-        table += f"| {result['level']:10s} | {result['score']:.2f} | {result['passed']:6s} | {result['steps']:5d} |\n"
-    
-    return table
+        return table
+    except Exception as e:
+        import traceback
+        error_msg = f"Failed to compare levels: {str(e)}\n\n{traceback.format_exc()}"
+        print(error_msg)
+        return f"Error comparing levels: {str(e)}"
 
 
 def create_demo():
@@ -366,11 +386,26 @@ def create_demo():
             with gr.Column(scale=3):
                 gr.Markdown("### 📺 Environment View")
                 
-                output_image = gr.Image(
-                    label="Drone Navigation",
-                    type="numpy",
-                    height=500,
-                )
+                # Check if we're in headless environment
+                import os
+                is_headless = os.environ.get('HF_SPACES') == '1' or not os.environ.get('DISPLAY', '')
+                
+                if is_headless:
+                    gr.Markdown("""
+                    **Note:** Visual rendering is disabled in this environment.
+                    
+                    The simulation runs in the background and provides detailed metrics and scoring below.
+                    """)
+                    output_image = gr.Image(
+                        visible=False,  # Hide the image component
+                        type="numpy",
+                    )
+                else:
+                    output_image = gr.Image(
+                        label="Drone Navigation",
+                        type="numpy",
+                        height=500,
+                    )
         
         with gr.Row():
             with gr.Column():
@@ -407,12 +442,12 @@ def create_demo():
             outputs=[comparison_output],
         )
         
-        # Auto-run on load
-        demo.load(
-            fn=run_demo_episode,
-            inputs=[task_level_dropdown, seed_slider],
-            outputs=[output_image, metrics_output, grade_output],
-        )
+        # Remove auto-run on load to prevent startup issues
+        # demo.load(
+        #     fn=run_demo_episode,
+        #     inputs=[task_level_dropdown, seed_slider],
+        #     outputs=[output_image, metrics_output, grade_output],
+        # )
         
         gr.Markdown("""
         ---
@@ -431,4 +466,4 @@ def create_demo():
 if __name__ == "__main__":
     # Create and launch demo
     demo = create_demo()
-    demo.launch(server_name="0.0.0.0", server_port=7860, theme=gr.themes.Soft())
+    demo.launch(ssr_mode=False)
